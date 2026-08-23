@@ -1,0 +1,9 @@
+SpeechRecognition
+pyttsx3
+psutil
+rich
+vosk
+gTTS
+cryptography
+pytest
+PyAudio
