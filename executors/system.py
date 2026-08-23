@@ -4,6 +4,7 @@ Nebula v9 — System, Volume, Brightness, Hardware, and Power Executors
 import os
 import sys
 import psutil
+import platform
 import subprocess
 from datetime import datetime
 from typing import Tuple, Dict, Any
