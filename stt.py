@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
-from config import NCFG, _save_cfg, _VOSK_MODEL_DIR, Log, RICH, rprint
+from config import NCFG, _save_cfg, _VOSK_MODEL_DIR, Log, RICH, rprint, no_c_stderr
 
 # Silence Vosk C-level logging
 try:
@@ -133,7 +133,9 @@ class STT:
             return None
         try:
             mic_idx = NCFG.get("mic_device_index")
-            with self._sr.Microphone(device_index=mic_idx) as source:
+            with no_c_stderr():
+                mic_ctx = self._sr.Microphone(device_index=mic_idx)
+            with mic_ctx as source:
                 audio = self._rec.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
                 return self.recognize(audio)
         except Exception:

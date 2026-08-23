@@ -1,13 +1,13 @@
-# Nebula v9 — AI Voice + OS Assistant
+# AnebulaX — AI Voice + OS Assistant
 
-A cross-platform (Windows/macOS/Linux) voice-controlled desktop assistant with offline command recognition and optional online AI (Gemini REST API or Antigravity/gemini CLI) integration.
+A cross-platform (Windows/macOS/Linux) voice-controlled desktop assistant with offline command recognition, modular architecture, and optional online AI (Gemini REST API or Antigravity/gemini CLI) integration.
 
 ## What It Does
 
-Nebula listens for voice commands (or accepts typed commands), matches them against a collection of intent patterns, and executes the corresponding action — opening apps, controlling the browser, managing files, running dev tools, answering questions, and more.
+AnebulaX listens for voice commands (or accepts typed commands), matches them against a collection of intent patterns, and executes the corresponding action — opening apps, controlling the browser, managing files, running dev tools, answering questions, and more.
 
 Two modes:
-- **Nebula** (offline) — wake word "nebula", processes commands locally via the word-set intent matcher
+- **AnebulaX** (offline) — wake word "anebulax", processes commands locally via the word-set intent matcher
 - **Nova** (online) — wake word "nova", routes questions to Gemini (API key preferred, Antigravity/Gemini CLI fallback)
 
 ## Architecture
@@ -21,7 +21,7 @@ User Input (voice/text)
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│  Alias Applier   │  ← user-defined: "not bad" → "notepad" (~/.nebula_aliases.json)
+│  Alias Applier   │  ← user-defined: "not bad" → "notepad" (~/.anebulax_aliases.json)
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
@@ -38,7 +38,7 @@ User Input (voice/text)
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│    Executor      │  ← 500+ functions: _fs_mkdir, _sys_vol_up, _p_time, etc.
+│    Executor      │  ← 743 functions: _fs_mkdir, _sys_vol_up, _p_time, etc.
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
@@ -52,16 +52,16 @@ User Input (voice/text)
 The codebase is partitioned into distinct modular components:
 - **`matcher.py`** — Word-set intersection scoring. Each command is a `frozenset` of trigger words; if all words in a trigger set appear in the input, it matches. Score = `weight × (1 + specificity×0.5) × (1 + n×0.1)` where `n` is the number of trigger words.
 - **`intents_db.py`** — Central trigger table (`_CMD_TABLE`), speech routing filters (`_SPEAK_EXECUTORS`, `_SILENT_EXECUTORS`), facts, quotes, and affirmations data.
-- **`licensing.py`** — Offline asymmetric Ed25519 licensing system (`~/.nebula_license.key`).
-- **`tts.py`** — Thread-safe queue with per-role muting (Nebula vs Nova). Engines: gTTS (online, natural) → pyttsx3 (offline) → espeak-ng → festival → flite → say (macOS). A `_SPEAK_EXECUTORS` set controls which commands speak vs stay silent.
+- **`licensing.py`** — Offline asymmetric Ed25519 licensing system (`~/.anebulax_license.key`).
+- **`tts.py`** — Thread-safe queue with per-role muting. Engines: gTTS (online, natural) → pyttsx3 (offline) → espeak-ng → festival → flite → say (macOS). A `_SPEAK_EXECUTORS` set controls which commands speak vs stay silent.
 - **`stt.py`** — Configurable: Google (online, default) or Vosk (offline) with `pause_threshold = 0.50s` and `non_speaking_duration = 0.40s`. Switch with `set stt google` / `set stt vosk`. Microphone device selection via `list mics` / `set mic N`.
 - **`executors/`** — 100% of all 743 executors natively partitioned into domain modules (`system.py`, `web.py`, `media.py`, `productivity.py`, `developer.py`, `math_solver.py`, `config_exec.py`, `common.py`) with zero monolithic fallback dependency.
-- **`main.py`** — Application entrypoint, CLI REPL, Nova AI async worker, and voice loop with active confirmation handling.
+- **`main.py` / `anebulax.py`** — Application entrypoint, CLI REPL, Nova AI async worker, and voice loop with active confirmation handling and low-level C stderr audio suppression.
 
 ## Installation
 
 ```bash
-pip install SpeechRecognition pyttsx3 psutil pyaudio rich vosk gtts cryptography
+pip install -r requirements.txt
 ```
 
 **Linux system deps:**
@@ -79,7 +79,8 @@ brew install portaudio ffmpeg
 ## Usage
 
 ```bash
-python main.py
+python anebulax.py
+# or: python main.py
 ```
 
 Type commands or say `voice` to start voice mode. Type `help` for the full command reference.
@@ -112,27 +113,27 @@ If voice mode prints "Voice mode ON" but doesn't detect speech:
 
 ### User-Configurable Files
 
-All in `~/.nebula_*`:
+All in `~/.anebulax_*`:
 
 | File | Purpose | Format |
 |------|---------|--------|
-| `.nebula_aliases.json` | Word substitutions | `{"not bad": "notepad"}` |
-| `.nebula_bookmarks.json` | Custom site shortcuts | `{"canva": "https://www.canva.com"}` |
-| `.nebula_software.txt` | Custom app paths (hot-reloaded) | `spotify \| /opt/spotify/spotify` |
-| `.nebula_license.key` | Offline signed license file (Ed25519) | Signed JSON payload |
-| `.nebula_notes_db.json` | Structured notes | Auto-managed |
-| `.nebula_cmd_history.json` | Command history (for `repeat`) | Auto-managed |
-| `.nebula_reminders.json` | Persisted reminders | Auto-managed |
-| `.nebula_config.json` | Settings (STT engine, theme, mic index, etc.) | Auto-managed |
+| `.anebulax_aliases.json` | Word substitutions | `{"not bad": "notepad"}` |
+| `.anebulax_bookmarks.json` | Custom site shortcuts | `{"canva": "https://www.canva.com"}` |
+| `.anebulax_software.txt` | Custom app paths (hot-reloaded) | `spotify \| /opt/spotify/spotify` |
+| `.anebulax_license.key` | Offline signed license file (Ed25519) | Signed JSON payload |
+| `.anebulax_notes_db.json` | Structured notes | Auto-managed |
+| `.anebulax_cmd_history.json` | Command history (for `repeat`) | Auto-managed |
+| `.anebulax_reminders.json` | Persisted reminders | Auto-managed |
+| `.anebulax_config.json` | Settings (STT engine, theme, mic index, etc.) | Auto-managed |
 
 ## Known Limitations
 
-1. **Modular Architecture** — The original 13,156-line monolithic script has been refactored into modular components (`matcher.py`, `intents_db.py`, `licensing.py`, `tts.py`, `stt.py`, `executors/`, `main.py`). All 743 executors are implemented directly in `executors/` with zero dependency on the legacy monolithic script. `nebula_v9_improved.py` is maintained only as a backward-compatible wrapper.
-2. **Licensing system & Key Management** — V9 implements Option B (Offline signed license file using asymmetric Ed25519 public-key verification). The client embeds only `EMBEDDED_PUBLIC_KEY_HEX`, verifying genuine vendor signatures without a server. Vendor private keys are not stored in the repository; they are intended to be generated offline and kept strictly in vendor secret environments (`NEBULA_VENDOR_PRIVATE_KEY`). A pre-signed evaluation license is shipped with the client for out-of-the-box community testing.
+1. **Modular Architecture** — All 743 executors are implemented directly in `executors/` with zero dependency on any legacy monolithic script. `anebulax.py` and `main.py` serve as the clean primary modular entrypoints.
+2. **Licensing system & Key Management** — AnebulaX implements Option B (Offline signed license file using asymmetric Ed25519 public-key verification). The client embeds only `EMBEDDED_PUBLIC_KEY_HEX`, verifying genuine vendor signatures without a server. Vendor private keys are not stored in the repository; they are intended to be generated offline and kept strictly in vendor secret environments (`NEBULA_VENDOR_PRIVATE_KEY`). A pre-signed evaluation license is shipped with the client for out-of-the-box community testing.
 3. **Voice confirmation for dangerous commands** — Shutdown, restart, sleep, and logout commands require explicit confirmation. In voice mode, the engine speaks the confirmation prompt and actively executes a targeted listening pass for verbal confirmation ("yes", "confirm", "proceed") before proceeding.
 4. **Trigger-set redundancy** — 341 executors have more than one unique trigger-set registered in `_CMD_TABLE`, totaling 875 unique trigger-sets among them. This is intentional (natural-language robustness — "set volume to 50", "change volume 50", "volume 50" all route to the same executor) but inflates the pattern count.
 5. **Functional duplication between `mm_*` and `clip_*`/`sys_*` batches** — Real duplicates identified in earlier versions (`mm_lock`/`sys_lock`, `mm_copy`/`clip_copy_sel`, `mm_cut`/`clip_cut`, `mm_paste`/`clip_paste`, `mm_maximize_app`/`win_max`, `mm_minimize_app`/`win_min_all`) have been consolidated to unified implementations.
-6. **Dead references in the SILENT list** — 59 executor names appear in `_SILENT_EXECUTORS` but have no corresponding entry in the dispatch dict `_e()`. None of these 59 appear in `_CMD_TABLE` either, so they are unreachable by any user command. Breakdown by prefix: 30 `web_open_*` names, 8 other `web_*` names, 7 `sys_*` names, 5 `mm_*` media names, 3 `win_*` names, 2 `fs_*` names, and 4 others. These are leftovers from V1 porting.
+6. **Dead references in the SILENT list** — 59 executor names appear in `_SILENT_EXECUTORS` but have no corresponding entry in the dispatch dict `_e()`. None of these 59 appear in `_CMD_TABLE` either, so they are unreachable by any user command. Breakdown by prefix: 30 `web_open_*` names, 8 other `web_*` names, 7 `sys_*` names, 5 `mm_*` media names, 3 `win_*` names, 2 `fs_*` names, and 4 others.
 7. **Browser tab control** — `refresh`, `close tab`, etc. require a browser to be the focused window. Uses `xdotool` on Linux, `SendKeys` on Windows, `osascript` on macOS.
 
 ### History: dead executors & security rotation (fixed)
@@ -164,4 +165,4 @@ This codebase was developed with AI assistance (Claude/GLM). The architecture, b
 
 This repository's source code is licensed under the [MIT License](file:///home/apurva/Desktop/Neb/16%20%28copy%201%29/nebula_v9/LICENSE).
 
-For standalone/compiled distribution, Nebula v9 includes an offline product activation mechanism (Option B: Offline signed license file with asymmetric Ed25519 public-key signature verification). The client ships strictly with the verification public key (`EMBEDDED_PUBLIC_KEY_HEX`); vendor signing keys are generated offline and stored in vendor secret environments (`NEBULA_VENDOR_PRIVATE_KEY`).
+For standalone/compiled distribution, AnebulaX includes an offline product activation mechanism (Option B: Offline signed license file with asymmetric Ed25519 public-key signature verification). The client ships strictly with the verification public key (`EMBEDDED_PUBLIC_KEY_HEX`); vendor signing keys are generated offline and stored in vendor secret environments (`NEBULA_VENDOR_PRIVATE_KEY`).

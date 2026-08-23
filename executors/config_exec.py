@@ -6,7 +6,7 @@ import platform
 from pathlib import Path
 from typing import Tuple
 
-from config import NCFG, _save_cfg, _VOSK_MODEL_DIR, Log
+from config import NCFG, _save_cfg, _VOSK_MODEL_DIR, Log, no_c_stderr
 from stt import _ensure_vosk_model
 
 
@@ -67,7 +67,8 @@ def _cfg_show_stt(e) -> Tuple[bool, str]:
 def _cfg_list_mics(e) -> Tuple[bool, str]:
     try:
         import speech_recognition as sr
-        names = sr.Microphone.list_microphone_names()
+        with no_c_stderr():
+            names = sr.Microphone.list_microphone_names()
         if not names:
             return False, "No microphone devices found by PyAudio."
         pref = NCFG.get("mic_device_index")

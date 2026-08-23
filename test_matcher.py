@@ -163,14 +163,14 @@ class TestMatcher:
 
 
 class TestNoBareExcept:
-    """Verify no bare 'except:' remains in any Nebula v9 module."""
+    """Verify no bare 'except:' remains in any AnebulaX module."""
 
     def test_no_bare_except(self):
-        nebula_files = [
+        anebulax_files = [
             "config.py", "licensing.py", "intents_db.py", "matcher.py",
-            "tts.py", "stt.py", "main.py", "nebula_v9_improved.py"
+            "tts.py", "stt.py", "main.py", "anebulax.py", "nebula_v9_improved.py"
         ]
-        py_files = [Path(__file__).parent / f for f in nebula_files if (Path(__file__).parent / f).exists()]
+        py_files = [Path(__file__).parent / f for f in anebulax_files if (Path(__file__).parent / f).exists()]
         py_files += list((Path(__file__).parent / "executors").glob("*.py"))
         for p in py_files:
             content = p.read_text(encoding="utf-8")

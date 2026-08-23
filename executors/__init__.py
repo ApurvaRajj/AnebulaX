@@ -25,7 +25,7 @@ from config import (
     IS_WIN, IS_MAC, IS_LINUX, NCFG, _save_cfg, _theme, Log, RICH, _RICH, rprint,
     _CONF_DIR, _CFG_FILE, _NOTES_FILE, _NOTES_DB_FILE, _TODO_FILE, _HABIT_FILE,
     _REMINDERS_FILE, _CMD_HISTORY_FILE, _ALIASES_FILE, _BOOKMARKS_FILE,
-    _SOFTWARE_FILE, _LOG_FILE, _VOSK_MODEL_DIR, VERSION
+    _SOFTWARE_FILE, _LOG_FILE, _VOSK_MODEL_DIR, VERSION, no_c_stderr
 )
 from matcher import apply_aliases
 from tts import TTS, _spk_ref, _tts_clean
@@ -1573,8 +1573,6 @@ def _p_timer(e):
     Thread(target=_go,daemon=True).start()
     lbl = f"{secs//60}m {secs%60}s" if secs>=60 else f"{secs}s"
     return True,f"Timer set: {lbl}"
-
-_REMINDERS_FILE = Cfg.HOME / ".nebula_reminders.json"
 
 def _load_reminders():
     try:

@@ -1,5 +1,5 @@
 """
-Nebula v9 — Main Application Entrypoint, CLI REPL, Voice Mode, and AI Queue
+AnebulaX — Main Application Entrypoint, CLI REPL, Voice Mode, and AI Queue
 """
 import os
 import sys
@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from config import (
-    VERSION, NCFG, _save_cfg, _theme, Log, RICH, _RICH, rprint, Panel,
-    _CMD_HISTORY_FILE
+    VERSION, NCFG, _save_cfg, _theme, Log, RICH, _RICH, _C, rprint, Panel,
+    _CMD_HISTORY_FILE, no_c_stderr
 )
 from licensing import verify_license, ensure_default_license
 from intents_db import _CMD_TABLE
@@ -41,7 +41,7 @@ def _add_cmd_history(raw: str, ok: bool, msg: str):
             "output": msg[:200],
             "timestamp": time.time()
         })
-        history = history[-100:]  # Keep last 100
+        history = history[-100:]
         _CMD_HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
     except Exception:
         pass
@@ -93,8 +93,8 @@ class GeminiProvider:
         return "__NOVA_SETUP__ Nova AI requires GEMINI_API_KEY or 'agy auth login'."
 
 
-class Nebula:
-    """Nebula & Nova Desktop Voice Assistant."""
+class AnebulaX:
+    """AnebulaX Desktop Voice Assistant."""
 
     def __init__(self):
         ensure_default_license()
@@ -135,12 +135,12 @@ class Nebula:
         lic_badge = f"[green]{lic_msg}[/green]" if lic_ok else f"[red]{lic_msg}[/red]"
         if RICH:
             rprint(Panel(
-                f"[bold {c}]NEBULA / NOVA v{VERSION}[/bold {c}]\n"
+                f"[bold {c}]ANEBULAX[/bold {c}]\n"
                 f"[dim]Type a command or say 'help'. Prefix with [bold]nova[/bold] to use AI.[/dim]\n"
                 f"[dim]Voice: {tts_state} | STT: {stt_engine} | License: {lic_badge}[/dim]",
-                title=f"[{c}]NEBULA v{VERSION}[/{c}]", border_style=c))
+                title=f"[{c}]ANEBULAX[/{c}]", border_style=c))
         else:
-            print(f"\n{'='*60}\n  NEBULA / NOVA v{VERSION}\n  Voice:{tts_state} | STT:{stt_engine}\n{'='*60}\n")
+            print(f"\n{'='*60}\n  ANEBULAX\n  Voice:{tts_state} | STT:{stt_engine}\n{'='*60}\n")
 
     def _output(self, ok: bool, msg: str, nova: bool = False):
         c = _theme()
@@ -260,7 +260,7 @@ class Nebula:
         return False, "unrecognized"
 
     def voice_mode_run(self):
-        """Voice listening loop with dynamic confirmations and noise calibration."""
+        """Voice listening loop with audio stderr suppression and noise calibration."""
         if not self.stt.ok:
             if RICH:
                 rprint("  [red]STT engine is unavailable. Please install SpeechRecognition & PyAudio.[/red]")
@@ -285,10 +285,13 @@ class Nebula:
         mic_idx = NCFG.get("mic_device_index")
 
         try:
-            with sr.Microphone(device_index=mic_idx) as source:
+            with no_c_stderr():
+                mic_ctx = sr.Microphone(device_index=mic_idx)
+            with mic_ctx as source:
                 r = self.stt._rec
                 if NCFG.get("dynamic_energy", True):
-                    r.adjust_for_ambient_noise(source, duration=0.8)
+                    with no_c_stderr():
+                        r.adjust_for_ambient_noise(source, duration=0.8)
 
                 while self.voice_mode:
                     try:
@@ -325,18 +328,22 @@ class Nebula:
                 print("  🎙 Voice Mode stopped.")
 
 
+# Alias for backward compatibility
+Nebula = AnebulaX
+
+
 def main():
-    neb = Nebula()
-    neb.banner()
+    app = AnebulaX()
+    app.banner()
 
     while True:
         try:
             if RICH and _C:
-                cmd = _C.input("[bold blue]nebula>[/bold blue] ").strip()
+                cmd = _C.input("[bold blue]anebulax>[/bold blue] ").strip()
             else:
-                cmd = input("nebula> ").strip()
+                cmd = input("anebulax> ").strip()
         except (KeyboardInterrupt, EOFError):
-            print("\nExiting Nebula. Goodbye!")
+            print("\nExiting AnebulaX. Goodbye!")
             break
 
         if not cmd:
@@ -345,9 +352,9 @@ def main():
             print("Goodbye!")
             break
         elif cmd.lower() in ("voice", "listen", "start voice"):
-            neb.voice_mode_run()
+            app.voice_mode_run()
         else:
-            neb.run_cmd(cmd)
+            app.run_cmd(cmd)
 
 
 if __name__ == "__main__":
