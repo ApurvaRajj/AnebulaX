@@ -1,7 +1,7 @@
 """
 AnebulaX — Backward Compatibility Alias (formerly nebula_v9_improved.py)
 """
-from anebulax import *
+import main
 
 if __name__ == "__main__":
-    main()
+    main.main()

@@ -215,16 +215,65 @@ class TestAliasesAndTypos:
 
 
 class TestNoDeadExecutors:
-    """Verify 100% of all 743 executors in _CMD_TABLE are dispatchable via executors._e()."""
+    """Verify 100% of all 747 executors in _CMD_TABLE are registered AND dispatchable without NameErrors."""
 
     def test_all_matched_executors_are_dispatchable(self):
-        dead = []
-        for trig, (ex, w) in intents_db._CMD_TABLE:
-            if executors._e(ex) is None:
-                dead.append((ex, trig))
-        assert len(dead) == 0, (
-            f"{len(dead)} dead executors: "
-            + ", ".join(f"{ex} (triggers: {trig})" for ex, trig in dead)
+        from unittest.mock import patch, MagicMock
+
+        mock_entity = {
+            'raw': 'test query text',
+            'text': 'test query text',
+            'query': 'test query text',
+            'duration': 60,
+            'level': 50,
+            'name': 'test',
+            'a': 10,
+            'b': 20,
+            'num': 5,
+            'n': 5,
+            'url': 'https://example.com'
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"status": "ok", "price": 100}'
+        mock_resp.__enter__.return_value = mock_resp
+
+        missing = []
+        name_errors = []
+
+        with patch('subprocess.run', return_value=MagicMock(returncode=0, stdout='ok', stderr='')), \
+             patch('subprocess.Popen'), \
+             patch('webbrowser.open'), \
+             patch('time.sleep'), \
+             patch('urllib.request.urlopen', return_value=mock_resp), \
+             patch('urllib.request.urlretrieve', return_value=('/tmp/test', None)), \
+             patch('socket.create_connection'), \
+             patch('socket.gethostbyname', return_value='127.0.0.1'), \
+             patch('os.walk', return_value=[('/tmp', [], ['test.txt'])]), \
+             patch.object(executors, 'Thread'), \
+             patch.object(executors, '_confirm_dangerous', return_value=(True, 'Confirmed')), \
+             patch.object(executors, '_cfg_test_mic', return_value=(True, 'Mic ok')), \
+             patch.object(executors, '_send_keys'):
+
+            for trig, (ex, w) in intents_db._CMD_TABLE:
+                fn = executors._e(ex)
+                if fn is None:
+                    missing.append((ex, trig))
+                    continue
+                try:
+                    fn(mock_entity)
+                except NameError as ne:
+                    name_errors.append((ex, str(ne)))
+                except Exception:
+                    pass
+
+        assert len(missing) == 0, (
+            f"{len(missing)} missing executors: "
+            + ", ".join(f"{ex} (triggers: {trig})" for ex, trig in missing)
+        )
+        assert len(name_errors) == 0, (
+            f"{len(name_errors)} NameErrors during dispatch: "
+            + ", ".join(f"{ex}: {err}" for ex, err in name_errors)
         )
 
 
