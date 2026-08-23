@@ -4044,7 +4044,6 @@ def _mm_read_aloud(e): return True, "Reading aloud active text"
 def _mm_read_clipboard(e):
     clip = _clip_read()
     return True, f"Clipboard: {clip[:200]}" if clip else "Clipboard is empty"
-def _mm_find_text(e): _send_keys("ctrl+f"); return True, "Find in page"
 def _mm_research(e):
     q = e.get("query", "") or e.get("text", "")
     return _search_url("https://www.google.com/search?q=" + urllib.parse.quote(q + " research papers"))
