@@ -2505,7 +2505,9 @@ def _fun_greet(e):
     return True,f"{g}! NEBULA v{VERSION} ready."
 
 def _fun_word(e):
-    w,d = random.choice(_WORDS); return True,f"Word of the day: {w} - {d}"
+    item = random.choice(_WORDS)
+    w, d = item if isinstance(item, tuple) else (item, "evocative and rare")
+    return True, f"Word of the day: {w} — {d}"
 
 # ── Developer ─────────────────────────────────────────────────────────────────
 def _dev_git(args, empty="Done"):
@@ -3956,7 +3958,18 @@ def _find_browser_cmd():
     return "xdg-open" if IS_LINUX else "open"
 
 _THEME_COLORS = {"blue": "blue", "cyan": "cyan", "green": "green", "yellow": "yellow", "magenta": "magenta", "red": "red"}
-_WORDS = ["serendipity", "ephemeral", "luminescence", "sonder", "petrichor", "solitude", "aurora", "ineffable", "mellifluous", "halcyon"]
+_WORDS = [
+    ("serendipity", "the occurrence of events by chance in a happy way"),
+    ("ephemeral", "lasting for a very short time"),
+    ("luminescence", "the emission of light by a substance"),
+    ("sonder", "the realization that each passerby has a vivid life"),
+    ("petrichor", "the pleasant smell that accompanies the first rain"),
+    ("solitude", "the state or situation of being alone"),
+    ("aurora", "a natural electrical phenomenon characterized by lights"),
+    ("ineffable", "too great or extreme to be expressed in words"),
+    ("mellifluous", "sweet or musical; pleasant to hear"),
+    ("halcyon", "denoting a period of time in the past that was peaceful")
+]
 _JOKES = [
     "Why do programmers prefer dark mode? Because light attracts bugs.",
     "Why do Java programmers wear glasses? Because they don't C#.",
@@ -4158,12 +4171,14 @@ def _fun_rand_choice(e):
 
 def _fun_shuffle(e): return True, "Items shuffled into random sequence."
 def _fun_rand_word(e):
-    w = random.choice(_WORDS)
-    return True, f"Random Word: {w}"
+    item = random.choice(_WORDS)
+    w, d = item if isinstance(item, tuple) else (item, "evocative and rare")
+    return True, f"Random Word: {w} — {d}"
 
 def _fun_word_day(e):
-    w = random.choice(_WORDS)
-    return True, f"Word of the Day: {w.capitalize()} — evocative, meaningful, and rare."
+    item = random.choice(_WORDS)
+    w, d = item if isinstance(item, tuple) else (item, "evocative, meaningful, and rare")
+    return True, f"Word of the Day: {w.capitalize()} — {d}"
 
 def _fun_8ball(e):
     answers = ["It is certain.", "Without a doubt.", "Reply hazy, try again.", "Don't count on it.", "Outlook good.", "Very doubtful."]
