@@ -161,3 +161,32 @@ def _cfg_test_mic(e) -> Tuple[bool, str]:
     lines.append(f"  [4/5] Energy threshold: {NCFG.get('voice_energy', 300)} (Dynamic: {NCFG.get('dynamic_energy', True)})")
     lines.append(f"  [5/5] Active STT engine: {NCFG.get('stt_engine', 'google')}")
     return True, "\n".join(lines)
+
+
+def _cfg_agy_model_cheapest(e) -> Tuple[bool, str]:
+    NCFG["agy_model"] = "flash_lite"
+    _save_cfg(NCFG)
+    return True, "Antigravity AI model switched to: flash_lite (cheapest, fastest model)."
+
+
+def _cfg_agy_model_better(e) -> Tuple[bool, str]:
+    NCFG["agy_model"] = "flash"
+    _save_cfg(NCFG)
+    return True, "Antigravity AI model switched to: flash (better, balanced model)."
+
+
+def _cfg_agy_model_best(e) -> Tuple[bool, str]:
+    NCFG["agy_model"] = "pro"
+    _save_cfg(NCFG)
+    return True, "Antigravity AI model switched to: pro (best, advanced reasoning model)."
+
+
+def _cfg_agy_model_show(e) -> Tuple[bool, str]:
+    model = NCFG.get("agy_model", "flash")
+    desc = {
+        "flash_lite": "cheapest / fastest",
+        "flash": "better / balanced",
+        "pro": "best / deep reasoning"
+    }.get(model, "standard")
+    return True, f"Active Antigravity AI Model: {model} ({desc})"
+

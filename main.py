@@ -47,24 +47,11 @@ def _add_cmd_history(raw: str, ok: bool, msg: str):
         pass
 
 
-class GeminiProvider:
-    """Gemini AI client wrapper for Nova mode."""
+class AntigravityProvider:
+    """Google Antigravity AI client wrapper for Nova mode."""
 
     def __init__(self):
-        self.ok = False
-        self._model = None
-        self._init()
-
-    def _init(self):
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if api_key:
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=api_key)
-                self._model = genai.GenerativeModel("gemini-1.5-flash")
-                self.ok = True
-            except Exception as e:
-                Log.debug(f"Gemini SDK init: {e}")
+        self.ok = True
 
     def ask(self, prompt: str) -> str:
         prompt_clean = prompt
@@ -73,24 +60,49 @@ class GeminiProvider:
                 prompt_clean = prompt_clean[len(prefix):].strip()
                 break
 
-        if self._model:
-            try:
-                resp = self._model.generate_content(prompt_clean)
-                return resp.text.strip()
-            except Exception as e:
-                Log.error(f"Gemini API error: {e}")
+        selected_model = NCFG.get("agy_model", "flash")
+        model_flags = []
+        if selected_model in ("flash_lite", "cheapest", "fastest"):
+            model_flags = ["--model", "flash_lite"]
+        elif selected_model in ("pro", "best", "deep"):
+            model_flags = ["--model", "pro"]
+        else:
+            model_flags = ["--model", "flash"]
 
-        # Fallback Antigravity / Gemini CLI
         import subprocess
         for cli in ("agy", "gemini"):
             try:
-                p = subprocess.run([cli, "ask", prompt_clean], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=12)
+                cmd = [cli, "ask"] + model_flags + [prompt_clean]
+                p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=18)
                 if p.returncode == 0 and p.stdout.strip():
                     return p.stdout.strip()
+                p2 = subprocess.run([cli, "ask", prompt_clean], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=18)
+                if p2.returncode == 0 and p2.stdout.strip():
+                    return p2.stdout.strip()
             except Exception:
                 pass
 
-        return "__NOVA_SETUP__ Nova AI requires GEMINI_API_KEY or 'agy auth login'."
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if api_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                model_name = "gemini-1.5-flash"
+                if selected_model in ("flash_lite", "cheapest"):
+                    model_name = "gemini-1.5-flash-8b"
+                elif selected_model in ("pro", "best"):
+                    model_name = "gemini-1.5-pro"
+                model = genai.GenerativeModel(model_name)
+                resp = model.generate_content(prompt_clean)
+                return resp.text.strip()
+            except Exception as e:
+                Log.debug(f"Antigravity API fallback error: {e}")
+
+        return "__NOVA_SETUP__ Nova AI requires Google Antigravity CLI ('agy auth login') or GEMINI_API_KEY."
+
+
+# Backward compatibility alias
+GeminiProvider = AntigravityProvider
 
 
 class AnebulaX:
@@ -101,7 +113,8 @@ class AnebulaX:
         self.matcher = Matcher(_CMD_TABLE)
         self.spk = TTS()
         self.stt = STT()
-        self.gemini = GeminiProvider()
+        self.ai = AntigravityProvider()
+        self.gemini = self.ai
         self.voice_mode = False
         self._nova_queue = queue.Queue()
         self._nova_thread = threading.Thread(target=self._nova_worker, daemon=True)
@@ -113,7 +126,7 @@ class AnebulaX:
             if raw is None:
                 break
             try:
-                resp = self.gemini.ask(raw)
+                resp = self.ai.ask(raw)
                 if resp:
                     no_speak = resp.startswith("__NOVA_SETUP__")
                     resp_display = resp.replace("__NOVA_SETUP__", "")
@@ -311,9 +324,14 @@ class AnebulaX:
                             self.run_cmd(text_clean)
                     except sr.WaitTimeoutError:
                         continue
+                    except (KeyboardInterrupt, EOFError):
+                        self.voice_mode = False
+                        break
                     except Exception as e:
                         Log.debug(f"Voice loop cycle: {e}")
                         time.sleep(0.1)
+        except (KeyboardInterrupt, EOFError):
+            pass
         except Exception as ex:
             if RICH:
                 rprint(f"  [red]Microphone error: {ex}[/red]")

@@ -148,6 +148,7 @@ _DEF_CFG = {
     "vosk_model_path": "",
     "mic_device_index": None,
     "dynamic_energy": True,
+    "agy_model": "flash",  # "flash_lite" (cheapest), "flash" (better), "pro" (best)
 }
 
 

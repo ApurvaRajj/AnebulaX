@@ -1,35 +1,57 @@
 """
-Nebula v9 — Text-To-Speech (TTS) Engine & Speech Queue
+AnebulaX — Text-To-Speech (TTS) Engine & Multi-Engine Speech Queue
 """
 import os
 import re
 import sys
 import queue
+import shutil
+import tempfile
 import threading
 import subprocess
 from typing import Optional
 
-from config import IS_WIN, IS_MAC, IS_LINUX, NCFG, Log
+from config import IS_WIN, IS_MAC, IS_LINUX, NCFG, Log, no_c_stderr
 from intents_db import _SPEAK_EXECUTORS, _SILENT_EXECUTORS
 
 _spk_ref = [None]
+
+
+def _find_audio_player() -> Optional[list]:
+    """Find installed CLI audio player on the system."""
+    if IS_WIN:
+        if shutil.which("ffplay"):
+            return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"]
+        return None
+    elif IS_MAC:
+        if shutil.which("afplay"):
+            return ["afplay"]
+        if shutil.which("ffplay"):
+            return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"]
+        return None
+    else:  # Linux
+        if shutil.which("ffplay"):
+            return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"]
+        if shutil.which("paplay"):
+            return ["paplay"]
+        if shutil.which("mpg123"):
+            return ["mpg123", "-q"]
+        if shutil.which("mpv"):
+            return ["mpv", "--no-video", "--really-quiet"]
+        if shutil.which("aplay"):
+            return ["aplay", "-q"]
+        return None
 
 
 def _tts_clean(text: str) -> str:
     """Strip markdown formatting, URLs, code fences, and ANSI codes before speaking."""
     if not text:
         return ""
-    # Strip markdown code blocks
     text = re.sub(r'```[\s\S]*?```', 'code block omitted', text)
-    # Strip inline code
     text = re.sub(r'`([^`]+)`', r'\1', text)
-    # Strip URLs
     text = re.sub(r'https?://\S+', 'URL', text)
-    # Strip ANSI color codes
     text = re.sub(r'\x1b\[[0-9;]*m', '', text)
-    # Strip markdown headers, bold, italics, bullets
     text = re.sub(r'[#*_~>]+', '', text)
-    # Collapse multiple whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -52,6 +74,7 @@ class TTS:
         self._q = queue.Queue()
         self._mode = "none"
         self._pyttsx = None
+        self._player_cmd = _find_audio_player()
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._init_engine()
@@ -60,39 +83,48 @@ class TTS:
         _spk_ref[0] = self
 
     def _init_engine(self):
-        # 1. Try pyttsx3
+        # 1. High-quality gTTS if audio player is present
+        try:
+            import gtts
+            if self._player_cmd:
+                self._mode = "gtts"
+                Log.info(f"TTS initialized with gTTS (player={' '.join(self._player_cmd)})")
+                return
+        except ImportError:
+            pass
+
+        # 2. Try pyttsx3 if native driver works
         try:
             import pyttsx3
-            self._pyttsx = pyttsx3.init()
-            self._pyttsx.setProperty("rate", 175)
-            self._mode = "pyttsx"
-            Log.info("TTS initialized with pyttsx3")
-            return
+            # On Linux, only use pyttsx3 if aplay or espeak binary is present
+            if not IS_LINUX or shutil.which("aplay") or shutil.which("espeak-ng") or shutil.which("espeak"):
+                with no_c_stderr():
+                    self._pyttsx = pyttsx3.init()
+                    self._pyttsx.setProperty("rate", 175)
+                self._mode = "pyttsx"
+                Log.info("TTS initialized with pyttsx3")
+                return
         except Exception as e:
             Log.debug(f"pyttsx3 init failed: {e}")
 
-        # 2. Try macOS say
-        if IS_MAC:
+        # 3. Try macOS say
+        if IS_MAC and shutil.which("say"):
             self._mode = "say"
             return
 
-        # 3. Try Linux native tools
+        # 4. Try Linux native tools
         if IS_LINUX:
             for tool in ["espeak-ng", "espeak", "festival", "flite"]:
-                try:
-                    p = subprocess.run([tool, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    if p.returncode == 0 or tool == "festival":
-                        self._mode = tool
-                        Log.info(f"TTS initialized with {tool}")
-                        return
-                except Exception:
-                    pass
+                if shutil.which(tool):
+                    self._mode = tool
+                    Log.info(f"TTS initialized with {tool}")
+                    return
 
-        # 4. Fallback gTTS
+        # 5. Fallback gTTS with whatever player
         try:
             import gtts
             self._mode = "gtts"
-            Log.info("TTS initialized with gTTS (fallback)")
+            Log.info("TTS initialized with gTTS")
         except ImportError:
             self._mode = "none"
             Log.warn("No TTS engine available. Speech output disabled.")
@@ -124,32 +156,30 @@ class TTS:
     def _play(self, text: str):
         with self._lock:
             try:
-                if self._mode == "pyttsx" and self._pyttsx:
-                    self._pyttsx.say(text)
-                    self._pyttsx.runAndWait()
+                if self._mode == "gtts":
+                    from gtts import gTTS
+                    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+                        tmp_name = tf.name
+                    tts = gTTS(text=text, lang="en")
+                    tts.save(tmp_name)
+                    player = self._player_cmd or (["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"] if shutil.which("ffplay") else None)
+                    if player:
+                        cmd = player + [tmp_name]
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    try:
+                        os.remove(tmp_name)
+                    except Exception:
+                        pass
+                elif self._mode == "pyttsx" and self._pyttsx:
+                    with no_c_stderr():
+                        self._pyttsx.say(text)
+                        self._pyttsx.runAndWait()
                 elif self._mode in ("espeak-ng", "espeak"):
                     subprocess.run([self._mode, "-s", "170", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 elif self._mode == "say":
                     subprocess.run(["say", "-r", "185", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 elif self._mode == "flite":
                     subprocess.run(["flite", "-t", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                elif self._mode == "gtts":
-                    import tempfile
-                    from gtts import gTTS
-                    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
-                        tmp_name = tf.name
-                    tts = gTTS(text=text, lang="en")
-                    tts.save(tmp_name)
-                    if IS_WIN:
-                        subprocess.run(["ffplay", "-nodisp", "-autoexit", tmp_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    elif IS_MAC:
-                        subprocess.run(["afplay", tmp_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    else:
-                        subprocess.run(["ffplay", "-nodisp", "-autoexit", tmp_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    try:
-                        os.remove(tmp_name)
-                    except Exception:
-                        pass
             except Exception as e:
                 Log.error(f"TTS play error: {e}")
 

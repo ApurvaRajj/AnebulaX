@@ -4700,8 +4700,41 @@ def _e(key):
      "mm_switch_window":     lambda e: _mm_switch_window(e),
      "mm_show_desktop":      lambda e: _mm_show_desktop(e),
      "mm_lock":              lambda e: _mm_lock(e),
+     "cfg_agy_model_cheapest": lambda e: _cfg_agy_model_cheapest(e),
+     "cfg_agy_model_better":   lambda e: _cfg_agy_model_better(e),
+     "cfg_agy_model_best":     lambda e: _cfg_agy_model_best(e),
+     "cfg_agy_model_show":     lambda e: _cfg_agy_model_show(e),
     }
     return fns.get(key)
+
+
+def _cfg_agy_model_cheapest(e):
+    NCFG["agy_model"] = "flash_lite"
+    _save_cfg(NCFG)
+    return True, "Antigravity AI model switched to: flash_lite (cheapest, fastest model)."
+
+
+def _cfg_agy_model_better(e):
+    NCFG["agy_model"] = "flash"
+    _save_cfg(NCFG)
+    return True, "Antigravity AI model switched to: flash (better, balanced model)."
+
+
+def _cfg_agy_model_best(e):
+    NCFG["agy_model"] = "pro"
+    _save_cfg(NCFG)
+    return True, "Antigravity AI model switched to: pro (best, advanced reasoning model)."
+
+
+def _cfg_agy_model_show(e):
+    model = NCFG.get("agy_model", "flash")
+    desc = {
+        "flash_lite": "cheapest / fastest",
+        "flash": "better / balanced",
+        "pro": "best / deep reasoning"
+    }.get(model, "standard")
+    return True, f"Active Antigravity AI Model: {model} ({desc})"
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

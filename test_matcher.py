@@ -145,6 +145,18 @@ class TestMatcher:
         assert self._executor("mute voice") == "cfg_toggle_tts"
         assert self._executor("unmute voice") == "cfg_toggle_tts"
 
+    # ── Antigravity AI Model Triggers ────────────────────────────────────────
+    def test_antigravity_model_triggers(self):
+        assert self._executor("use cheapest model") == "cfg_agy_model_cheapest"
+        assert self._executor("switch to cheapest model") == "cfg_agy_model_cheapest"
+        assert self._executor("use flash lite") == "cfg_agy_model_cheapest"
+        assert self._executor("use better model") == "cfg_agy_model_better"
+        assert self._executor("use flash model") == "cfg_agy_model_better"
+        assert self._executor("use best model") == "cfg_agy_model_best"
+        assert self._executor("use pro model") == "cfg_agy_model_best"
+        assert self._executor("show ai model") == "cfg_agy_model_show"
+        assert self._executor("which model") == "cfg_agy_model_show"
+
     # ── Bookmarks Management ─────────────────────────────────────────────────
     def test_bookmark_triggers(self):
         assert self._executor("list bookmarks") == "mm_show_bookmarks"
