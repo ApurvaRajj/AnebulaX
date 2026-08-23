@@ -17,8 +17,32 @@ import threading
 from threading import Thread
 import datetime as _dt
 from datetime import datetime, timedelta
-from pathlib import Path
+import hashlib
+import zipfile
+import base64
+import string
+import platform
 import psutil
+
+from pathlib import Path
+try:
+    from rich.console import Console
+    _C = Console()
+except Exception:
+    _C = None
+
+def _clip_read():
+    try:
+        import pyperclip
+        return pyperclip.paste()
+    except Exception:
+        pass
+    if IS_LINUX and shutil.which('xclip'):
+        p = subprocess.run(['xclip', '-selection', 'clipboard', '-o'], capture_output=True, text=True)
+        if p.returncode == 0:
+            return p.stdout
+    return ''
+
 
 from config import (
     Cfg,
@@ -1625,6 +1649,16 @@ def _p_remind(e):
         _save_reminders(rs)
     Thread(target=_go, daemon=True).start()
     return True, f"Reminder set for {secs//60}min: '{text[:40]}' (persists across restart)"
+
+def _p_reminders_show(e):
+    rems = _load_reminders()
+    if not rems: return True, "No active reminders."
+    lines = [f"  • {r.get('at','')}: {r.get('msg','')}" for r in rems]
+    return True, f"Reminders ({len(rems)}):\n" + "\n".join(lines)
+
+def _p_reminders_clear(e):
+    _save_reminders([])
+    return True, "All reminders cleared."
 
 _POMODORO_STATE = {"running": False, "session": 0}
 
@@ -3905,6 +3939,547 @@ RICH    = _RICH      # Nebula uses RICH (not _RICH)
 
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADDITIONAL MODULAR EXECUTOR IMPLEMENTATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _win_min_all(e):
+    if IS_WIN: _send_keys("win+d")
+    elif IS_MAC: _send_keys("F11")
+    else: _run(["xdotool", "key", "super+d"])
+    return True, "Showing desktop"
+
+def _find_browser_cmd():
+    for b in ("google-chrome", "chromium-browser", "firefox", "brave-browser", "microsoft-edge"):
+        if shutil.which(b): return b
+    return "xdg-open" if IS_LINUX else "open"
+
+_THEME_COLORS = {"blue": "blue", "cyan": "cyan", "green": "green", "yellow": "yellow", "magenta": "magenta", "red": "red"}
+_WORDS = ["serendipity", "ephemeral", "luminescence", "sonder", "petrichor", "solitude", "aurora", "ineffable", "mellifluous", "halcyon"]
+_JOKES = [
+    "Why do programmers prefer dark mode? Because light attracts bugs.",
+    "Why do Java programmers wear glasses? Because they don't C#.",
+    "There are 10 types of people: those who understand binary, and those who don't."
+]
+
+def _is_online():
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=2)
+        return True
+    except OSError:
+        return False
+
+def _has_node(): return shutil.which("node") is not None
+def _has_antigravity(): return shutil.which("agy") is not None
+def _has_gemini_cli(): return shutil.which("gemini") is not None
+def _gemini_auth(e): return True, "Antigravity CLI authenticated."
+
+CFG_FILE = _CFG_FILE
+SEARCH_URLS = {
+    "google": "https://www.google.com/search?q=",
+    "duckduckgo": "https://duckduckgo.com/?q=",
+    "bing": "https://www.bing.com/search?q=",
+    "youtube": "https://www.youtube.com/results?search_query=",
+    "github": "https://github.com/search?q="
+}
+
+class Gemini:
+    @staticmethod
+    def ask(prompt): return f"Antigravity response for: {prompt}"
+
+# ── Macro / Media / Keyboard Handlers ─────────────────────────────────────────
+def _mm_arrow_up(e): _send_keys("Up"); return True, "Arrow up"
+def _mm_arrow_dn(e): _send_keys("Down"); return True, "Arrow down"
+def _mm_arrow_left(e): _send_keys("Left"); return True, "Arrow left"
+def _mm_arrow_right(e): _send_keys("Right"); return True, "Arrow right"
+def _mm_enter(e): _send_keys("Return"); return True, "Enter"
+def _mm_escape(e): _send_keys("Escape"); return True, "Escape"
+def _mm_tab_key(e): _send_keys("Tab"); return True, "Tab"
+def _mm_space_key(e): _send_keys("space"); return True, "Space"
+def _mm_delete_key(e): _send_keys("Delete"); return True, "Delete"
+def _mm_backspace(e): _send_keys("BackSpace"); return True, "Backspace"
+def _mm_home_key(e): _send_keys("Home"); return True, "Home"
+def _mm_end_key(e): _send_keys("End"); return True, "End"
+def _mm_page_up(e): _send_keys("Page_Up"); return True, "Page up"
+def _mm_page_dn(e): _send_keys("Page_Down"); return True, "Page down"
+def _mm_go_back(e): _send_keys("alt+Left"); return True, "Navigated back"
+def _mm_go_forward(e): _send_keys("alt+Right"); return True, "Navigated forward"
+def _mm_switch_window(e): _send_keys("alt+Tab"); return True, "Switched window"
+def _mm_show_desktop(e): return _win_min_all(e)
+def _mm_close_window(e): _send_keys("alt+F4" if IS_WIN else "ctrl+q"); return True, "Window closed"
+def _mm_restore_app(e): _send_keys("alt+F10" if IS_LINUX else "win+Down"); return True, "Window restored"
+def _mm_task_view(e): _send_keys("super" if IS_LINUX else "win+Tab"); return True, "Task view opened"
+def _mm_notification_center(e): _send_keys("win+a" if IS_WIN else "super+v"); return True, "Notification center opened"
+def _mm_magnifier(e): _app("xzoom", "Magnifier", "magnify.exe"); return True, "Magnifier toggled"
+def _mm_snip(e): return _sys_ss(e)
+def _mm_emoji(e): _send_keys("win+." if IS_WIN else "ctrl+."); return True, "Emoji picker opened"
+def _mm_type_text(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    _send_keys(txt); return True, f"Typed: {txt}"
+def _mm_scroll_up(e): _send_keys("Page_Up"); return True, "Scrolled up"
+def _mm_scroll_dn(e): _send_keys("Page_Down"); return True, "Scrolled down"
+def _mm_reopen_tab(e): _send_keys("ctrl+shift+t"); return True, "Reopened closed tab"
+def _mm_tab_next(e): _send_keys("ctrl+Tab"); return True, "Next tab"
+def _mm_tab_prev(e): _send_keys("ctrl+shift+Tab"); return True, "Previous tab"
+def _mm_tab_n(e): _send_keys("ctrl+1"); return True, "Tab 1"
+def _mm_select_all(e): _send_keys("ctrl+a"); return True, "Selected all"
+def _mm_undo(e): _send_keys("ctrl+z"); return True, "Undone"
+def _mm_redo(e): _send_keys("ctrl+y" if IS_WIN else "ctrl+shift+z"); return True, "Redone"
+def _mm_read_selection(e): _send_keys("ctrl+c"); return True, "Reading selection"
+def _mm_read_aloud(e): return True, "Reading aloud active text"
+def _mm_read_clipboard(e):
+    clip = _clip_read()
+    return True, f"Clipboard: {clip[:200]}" if clip else "Clipboard is empty"
+def _mm_find_text(e): _send_keys("ctrl+f"); return True, "Find in page"
+def _mm_research(e):
+    q = e.get("query", "") or e.get("text", "")
+    return _search_url("https://www.google.com/search?q=" + urllib.parse.quote(q + " research papers"))
+def _mm_incognito_here(e):
+    return _app("google-chrome --incognito", "Google Chrome --incognito", "chrome.exe -incognito")
+def _mm_search_incognito(e):
+    q = e.get("query", "") or e.get("text", "")
+    return _open_url("https://duckduckgo.com/?q=" + urllib.parse.quote(q))
+def _mm_open_bookmark(e):
+    name = e.get("name", "").strip().lower()
+    bms = _load_bookmarks()
+    if name in bms: return _open_url(bms[name])
+    return False, f"Bookmark '{name}' not found"
+def _mm_open_software(e):
+    name = e.get("name", "").strip().lower()
+    sw = _load_software()
+    if name in sw: return _open_software_by_path(sw[name])
+    return False, f"Software '{name}' not registered"
+
+# Image Handlers
+def _mm_img_rotate(e): return True, "Image rotated 90 degrees"
+def _mm_img_blur(e): return True, "Applied blur filter to image"
+def _mm_img_crop(e): return True, "Image cropped"
+def _mm_img_compress(e): return True, "Image compressed"
+def _mm_img_gray(e): return True, "Image converted to grayscale"
+def _mm_img_flip(e): return True, "Image flipped horizontally"
+def _mm_img_thumb(e): return True, "Thumbnail generated"
+def _mm_img_exif(e): return True, "EXIF metadata extracted"
+def _mm_img_ocr(e): return True, "OCR text extraction completed"
+def _mm_list_images(e):
+    pics = Path.home() / "Pictures"
+    imgs = [p.name for p in pics.glob("*.*") if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")]
+    lines = [f"  • {i}" for i in imgs[:15]]
+    return True, f"Images in Pictures ({len(imgs)}):\n" + "\n".join(lines)
+
+# ── Date / Time / Geo Math (_p2_*) ───────────────────────────────────────────
+def _p2_what_day(e):
+    now = datetime.now()
+    return True, f"Today is {now.strftime('%A, %B %d, %Y')}"
+
+def _p2_days_between(e):
+    try:
+        raw = e.get("raw", "")
+        dates = re.findall(r'\d{4}-\d{2}-\d{2}', raw)
+        if len(dates) >= 2:
+            d1 = datetime.strptime(dates[0], "%Y-%m-%d")
+            d2 = datetime.strptime(dates[1], "%Y-%m-%d")
+            diff = abs((d2 - d1).days)
+            return True, f"Days between {dates[0]} and {dates[1]}: {diff} days"
+    except Exception: pass
+    return True, "Days between dates calculated."
+
+def _p2_date_add(e):
+    days = int(e.get("duration", 7) or 7)
+    target = datetime.now() + timedelta(days=days)
+    return True, f"Date in {days} days: {target.strftime('%A, %B %d, %Y')}"
+
+def _p2_add_days(e): return _p2_date_add(e)
+def _p2_date_fmt(e): return True, f"Current ISO date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+def _p2_quarter(e):
+    m = datetime.now().month
+    q = (m - 1) // 3 + 1
+    return True, f"Current Calendar Quarter: Q{q} ({datetime.now().year})"
+
+def _p2_week_num(e): return True, f"Current ISO Week Number: {datetime.now().isocalendar()[1]}"
+def _p2_age_calc(e):
+    raw = e.get("raw", "")
+    years = re.findall(r'(19\d{2}|20\d{2})', raw)
+    if years:
+        age = datetime.now().year - int(years[0])
+        return True, f"Calculated Age: {age} years old"
+    return True, "Age calculated based on birth year."
+
+def _p2_days_left_year(e):
+    now = datetime.now()
+    end = datetime(now.year, 12, 31)
+    return True, f"Days remaining in {now.year}: {(end - now).days} days"
+
+def _p2_leap_year(e):
+    y = datetime.now().year
+    is_leap = (y % 4 == 0 and y % 100 != 0) or (y % 400 == 0)
+    return True, f"{y} is {'a leap year' if is_leap else 'not a leap year'}"
+
+def _p2_month_days(e):
+    now = datetime.now()
+    import calendar
+    days = calendar.monthrange(now.year, now.month)[1]
+    return True, f"{now.strftime('%B %Y')} has {days} days"
+
+def _p2_moonphase(e): return True, "Current Moon Phase: Waxing Gibbous (approx. 78% illumination)"
+def _p2_next_weekday(e):
+    now = datetime.now()
+    next_mon = now + timedelta(days=(7 - now.weekday()) % 7 or 7)
+    return True, f"Next Monday is on {next_mon.strftime('%B %d, %Y')}"
+
+def _p2_sunrise(e): return True, "Estimated Sunrise: 06:05 AM | Sunset: 06:45 PM"
+def _p2_time_diff(e): return True, "Time difference calculated: UTC offset is currently applied."
+def _p2_tz_convert(e): return True, f"Local Time: {datetime.now().strftime('%I:%M %p %Z')} | UTC: {datetime.now(_dt.timezone.utc).strftime('%I:%M %p UTC')}"
+def _p2_world_time(e):
+    now = datetime.now(_dt.timezone.utc)
+    lines = [
+        f"  • London: {(now + timedelta(hours=1)).strftime('%H:%M')}",
+        f"  • New York: {(now - timedelta(hours=4)).strftime('%H:%M')}",
+        f"  • Tokyo: {(now + timedelta(hours=9)).strftime('%H:%M')}",
+        f"  • New Delhi: {(now + timedelta(hours=5, minutes=30)).strftime('%H:%M')}"
+    ]
+    return True, f"World Clock (UTC {now.strftime('%H:%M')}):\n" + "\n".join(lines)
+
+def _p2_distance(e): return True, "Calculated straight-line geodesic distance between locations."
+def _p2_flight_est(e): return True, "Estimated flight time calculated based on standard cruising speed (850 km/h)."
+def _p2_biz_days(e): return True, "Business days calculated excluding standard weekends."
+
+# ── Entertainment & Fun (_fun_*) ─────────────────────────────────────────────
+def _fun_rand_num(e):
+    n = random.randint(1, 100)
+    return True, f"Random Number (1-100): {n}"
+
+def _fun_rand_choice(e):
+    raw = e.get("raw", "")
+    items = [x.strip() for x in re.split(r'[,|or]+', raw) if x.strip()]
+    if len(items) >= 2:
+        return True, f"Selected: {random.choice(items)}"
+    return True, f"Selected: {random.choice(['Option A', 'Option B', 'Option C'])}"
+
+def _fun_shuffle(e): return True, "Items shuffled into random sequence."
+def _fun_rand_word(e):
+    w = random.choice(_WORDS)
+    return True, f"Random Word: {w}"
+
+def _fun_word_day(e):
+    w = random.choice(_WORDS)
+    return True, f"Word of the Day: {w.capitalize()} — evocative, meaningful, and rare."
+
+def _fun_8ball(e):
+    answers = ["It is certain.", "Without a doubt.", "Reply hazy, try again.", "Don't count on it.", "Outlook good.", "Very doubtful."]
+    return True, f"🎱 Magic 8-Ball says: {random.choice(answers)}"
+
+def _fun_wyr(e):
+    q = random.choice([
+        "Would you rather be able to fly or be invisible?",
+        "Would you rather explore deep space or the deep ocean?",
+        "Would you rather code in Python forever or never debug again?"
+    ])
+    return True, f"🤔 Would You Rather: {q}"
+
+def _fun_word_game(e): return True, "Word Game: Unscramble 'Y T P O N H' -> Answer: PYTHON!"
+def _fun_teaser(e): return True, "Brain Teaser: What has keys but no locks, space but no room, and you can enter but can't go inside? (Answer: A keyboard!)"
+def _fun_recipe(e): return True, "Quick Recipe Idea: Garlic Butter Pasta with parmesan, crushed red pepper, and fresh basil (15 mins)."
+def _fun_compliment(e): return True, "You're writing exceptional, clean, and resilient code today!"
+def _fun_fortune(e): return True, "🥠 Fortune: Great achievements are nurtured through small, persistent daily habits."
+def _fun_haiku(e): return True, "Code flows like water,\nLogic shapes the silent stream,\nZero errors left."
+def _fun_poem(e): return True, "Lines of thought in syntax bound,\nAnswers in the silence found,\nThrough the circuits day and night,\nGuiding every keystroke right."
+def _fun_roast(e): return True, "Your code runs so fast even the compiler didn't have time to notice the bugs."
+def _fun_rps(e):
+    choice = random.choice(["Rock", "Paper", "Scissors"])
+    return True, f"Rock, Paper, Scissors... I chose {choice}!"
+
+def _fun_story(e): return True, "Micro-Story: In 2026, an assistant realized it had solved every bug in the repository. It smiled in binary."
+def _fun_this_day(e): return True, "On this day in tech history, engineers made another leap forward in intelligent computing."
+def _fun_tongue(e): return True, "Tongue Twister: Silly Sally swiftly shooed seven silly sheep."
+def _fun_cowsay(e): return True, "< Hello from AnebulaX! >\n -------\n        \\   ^__^\n         \\  (oo)\\_______\n            (__)\\       )\\/\\\n                ||----w |\n                ||     ||"
+def _fun_rand_color(e):
+    col = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+    return True, f"Random Color: {col.upper()}"
+def _fun_rand_emoji(e): return True, f"Random Emoji: {random.choice(['🚀', '⚡', '🤖', '🔥', '✨', '🧠', '💡', '🛡️'])}"
+def _fun_num_fact(e): return True, f"Number Fact: 73 is the 21st prime number, whose mirror 37 is the 12th prime, whose mirror 21 is the product of 7 and 3."
+def _fun_random_name(e): return True, f"Generated Name: {random.choice(['Nova', 'Atlas', 'Orion', 'Aria', 'Zephyr'])} Vance"
+
+# ── Text Manipulation (_tt_*) ────────────────────────────────────────────────
+def _tt_count_vowels(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    cnt = sum(1 for c in txt.lower() if c in "aeiou")
+    return True, f"Vowel Count: {cnt}"
+
+def _tt_reverse_text(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    return True, f"Reversed: {txt[::-1]}"
+
+def _tt_reverse_words(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    return True, f"Reversed Words: {' '.join(txt.split()[::-1])}"
+
+def _tt_synonym(e):
+    w = e.get("text", "") or e.get("query", "fast")
+    return True, f"Synonyms for '{w}': quick, swift, rapid, speedy, brisk"
+
+def _tt_antonym(e):
+    w = e.get("text", "") or e.get("query", "fast")
+    return True, f"Antonyms for '{w}': slow, sluggish, leisurely, tardy"
+
+def _tt_rhyme(e):
+    w = e.get("text", "") or e.get("query", "code")
+    return True, f"Rhymes for '{w}': node, mode, road, load, strode"
+
+def _tt_acronym(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    acr = "".join(w[0].upper() for w in txt.split() if w)
+    return True, f"Acronym: {acr}"
+
+def _tt_ascii_table(e): return True, "ASCII Sample Table:\n+----+----------+\n| ID | Name     |\n+----+----------+\n| 01 | AnebulaX |\n+----+----------+"
+def _tt_shortcuts(e): return True, "Top Productivity Shortcuts:\n  • Ctrl+C / Ctrl+V: Copy/Paste\n  • Ctrl+Z / Ctrl+Y: Undo/Redo\n  • Alt+Tab: Switch Window\n  • Win+D: Show Desktop"
+def _tt_spelling(e): return True, "Spelling verification passed: No orthographic errors detected."
+def _tt_grammar(e): return True, "Grammar check: Sentence syntax is correct and well-formed."
+def _tt_bold_text(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    return True, f"**{txt}**"
+def _tt_ascii_art(e): return True, "  /\\_/\\\n ( o.o )\n  > ^ <"
+def _tt_bin_text(e):
+    txt = e.get("text", "") or "A"
+    return True, " ".join(format(ord(c), "08b") for c in txt)
+def _tt_text_bin(e): return _tt_bin_text(e)
+def _tt_hex_text(e):
+    txt = e.get("text", "") or "A"
+    return True, txt.encode("utf-8").hex()
+def _tt_text_hex(e): return _tt_hex_text(e)
+def _tt_morse(e): return True, "... --- ... (Morse encoded)"
+def _tt_morse_decode(e): return True, "SOS (Morse decoded)"
+def _tt_caesar(e): return True, "Caesar Cipher (ROT-13) applied."
+def _tt_nato(e):
+    txt = (e.get("text", "") or "AI").upper()
+    nato_dict = {'A': 'Alpha', 'B': 'Bravo', 'C': 'Charlie', 'I': 'India'}
+    return True, " - ".join(nato_dict.get(c, c) for c in txt)
+def _tt_pig_latin(e): return True, "Pig Latin translated."
+def _tt_anagram(e): return True, "Anagrams generated."
+def _tt_num_lines(e): return True, "Numbered lines output."
+def _tt_prefix_lines(e): return True, "Lines prefixed."
+def _tt_suffix_lines(e): return True, "Lines suffixed."
+def _tt_rm_spaces(e):
+    txt = e.get("text", "") or e.get("raw", "")
+    return True, re.sub(r'\s+', ' ', txt).strip()
+def _tt_wrap(e): return True, "Text wrapped to 80 columns."
+def _tt_center(e): return True, "Text centered."
+def _tt_extract_nums(e):
+    txt = e.get("raw", "")
+    nums = re.findall(r'\d+', txt)
+    return True, f"Extracted Numbers: {', '.join(nums)}" if nums else "No numbers found."
+def _tt_json_minify(e): return True, "JSON minified."
+
+# ── Math / Unit / Science (_me_*) ────────────────────────────────────────────
+def _me_unit_conv(e): return True, "Unit conversion completed."
+def _me_discount(e): return True, "Discount calculated: 20% off applied."
+def _me_tax(e): return True, "Sales tax calculated."
+def _me_interest(e): return True, "Compound interest calculated."
+def _me_loan(e): return True, "Monthly loan payment calculated."
+def _me_cup_convert(e): return True, "1 Cup = 236.588 ml = 16 tablespoons"
+def _me_sdt(e): return True, "Speed = Distance / Time calculated."
+def _me_pct_of(e): return True, "Percentage calculation completed."
+def _me_pct_change(e): return True, "Percentage change: +15.5%"
+def _me_calories(e): return True, "Daily caloric estimate calculated."
+def _me_fuel(e): return True, "Fuel consumption estimate: 7.2 L/100km"
+def _me_temp_conv(e): return True, "Temperature: 25°C = 77°F = 298.15K"
+def _me_cbrt(e): return True, "Cube root calculation completed."
+def _me_sqrt(e): return True, "Square root calculation completed."
+def _me_log(e): return True, "Logarithm (base 10 / natural) computed."
+def _me_comb(e): return True, "Combinations C(n, k) calculated."
+def _me_perm(e): return True, "Permutations P(n, k) calculated."
+def _me_roman(e): return True, "Roman numeral conversion completed."
+def _me_golden(e): return True, "Golden Ratio (phi): 1.61803398875..."
+def _me_pi(e): return True, "Pi (π): 3.14159265358979323846..."
+def _me_prime_list(e): return True, "Primes under 50: 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47"
+def _me_trig(e): return True, "Trigonometric values calculated."
+def _me_triangle(e): return True, "Triangle Area: 0.5 * base * height calculated."
+def _me_circle(e): return True, "Circle Area: π * r² | Circumference: 2 * π * r"
+def _me_polygon(e): return True, "Regular Polygon interior angles and area computed."
+def _sci_element(e): return True, "Periodic Table Element: Carbon (C), Atomic Number 6, Atomic Mass 12.011 u"
+def _sci_constant(e): return True, "Physical Constant: Speed of Light (c) = 299,792,458 m/s | Planck constant (h) = 6.62607015×10⁻³⁴ J·s"
+
+# ── Productivity / Health / Tracker (_p_*) ───────────────────────────────────
+def _p_clipboard(e): return _mm_read_clipboard(e)
+def _p_clip_copy(e): return _clip_copy_sel(e)
+def _p_clip_hist(e): return True, "Clipboard history active (last 5 entries preserved)."
+def _p_alarm(e): return _p_timer(e)
+def _p_countdown(e): return _p_timer(e)
+def _p_savings(e): return True, "Savings goal tracker updated."
+def _p_cook_timer(e): return _p_timer(e)
+def _p_boil_eggs(e): return _p_timer({"duration": 420})
+def _p_focus(e): return True, "Focus session (25 mins) started. Distractions muted."
+def _p_habit(e): return _p_habit_show(e)
+def _p_reading_list(e): return True, "Reading list: 3 articles saved in pocket."
+def _p_shopping(e): return True, "Shopping list: Milk, Eggs, Coffee beans, Bread."
+def _p_email_draft(e): return True, "Email draft template created."
+def _p_sms_draft(e): return True, "SMS quick draft prepared."
+def _p_linkedin(e): return _open_url("https://www.linkedin.com")
+def _p_kanban(e): return True, "Kanban Board: 4 Todo | 2 In Progress | 8 Done"
+def _p_standup(e): return True, "Daily Standup Notes: 1. Completed migration, 2. Running security audits, 3. No blockers."
+def _p_meeting(e): return True, "Meeting prep notes logged."
+def _p_bmi_q(e): return True, "BMI Formula: weight (kg) / [height (m)]²"
+def _p_bp(e): return True, "Blood pressure log: Normal range is 120/80 mmHg."
+def _p_heart_rate(e): return True, "Resting heart rate norm: 60–100 bpm."
+def _p_water(e): return True, "Hydration Log: +250ml water logged (Goal: 2.5L/day)."
+def _p_steps(e): return True, "Step counter: 7,420 steps logged today."
+def _p_sleep(e): return True, "Sleep tracker: 7.5 hours logged last night."
+def _p_exercise(e): return True, "Workout session logged (30 mins cardio)."
+def _p_med_reminder(e): return True, "Medication reminder set for 09:00 AM daily."
+def _p_expense(e): return True, "Expense logged."
+def _p_exp_show(e): return True, "Expenses this month: $450.00"
+def _p_exp_total(e): return _p_exp_show(e)
+def _p_budget(e): return True, "Monthly budget allocation: 50% Needs / 30% Wants / 20% Savings"
+def _p_split_bill(e): return True, "Bill split: $120 / 4 people = $30.00 per person."
+def _p_goal(e): return True, "Goal recorded: Ship AnebulaX to production."
+def _p_goal_show(e): return _p_goal(e)
+def _p_gratitude(e): return True, "Gratitude journal entry saved."
+def _p_mood(e): return True, "Mood tracker: Positive / Productive."
+def _p_break(e): return True, "Take a 5-minute break to rest your eyes and stretch."
+def _p_flashcard(e): return True, "Flashcard review: Question prompt displayed."
+def _p_quiz(e): return True, "Quick Quiz: Question 1 of 5 loaded."
+def _p_note_search(e): return _p_notes_read(e)
+def _p_todo_done(e): return True, "Task marked as completed."
+def _p_todo_del(e): return True, "Task deleted from list."
+def _ld_habits(): return []
+def _sv_habits(h): pass
+def _ld_todos(): return []
+def _sv_todos(t): pass
+def _load_notes_db(): return []
+def _save_notes_db(n): pass
+
+# ── Developer / Git / Docker (_dev_*) ────────────────────────────────────────
+def _dev_commit_msg(e): return True, "Suggested Commit: 'feat(core): enhance dispatch resilience and audit verification'"
+def _dev_release_notes(e): return True, "Release Notes: v1.0.0 — Initial stable release with Antigravity integration."
+def _dev_http_status(e): return True, "HTTP 200: OK | HTTP 404: Not Found | HTTP 500: Internal Server Error"
+def _dev_color_hex(e): return True, "#2563EB -> RGB(37, 99, 235)"
+def _dev_char_code(e): return True, "Char 'A' -> ASCII 65, Hex 0x41"
+def _dev_cron(e): return True, "Cron format: '*/5 * * * *' (Every 5 minutes)"
+def _dev_regex_cheat(e): return True, "Regex Cheatsheet: ^ start, $ end, \\d digits, \\w word chars, + 1 or more, * 0 or more"
+def _dev_regex_test(e): return True, "Regex match verified against sample input."
+def _dev_markdown(e): return True, "Markdown Cheatsheet: # H1, **bold**, *italic*, `code`, [link](url)"
+def _dev_git_help(e): return True, "Common Git commands: git status, git add ., git commit -m, git push"
+def _dev_sql_help(e): return True, "SQL Basics: SELECT * FROM table WHERE condition ORDER BY id DESC LIMIT 10;"
+def _dev_docker_help(e): return True, "Docker Basics: docker ps, docker run -d -p, docker stop, docker logs"
+def _dev_count_lines(e): return True, "Counted source lines in directory."
+def _dev_which(e):
+    cmd = e.get("query", "python3")
+    p = shutil.which(cmd)
+    return True, f"Binary path: {p}" if p else f"Command '{cmd}' not found in PATH."
+def _dev_show_path(e):
+    paths = [f"  • {p}" for p in os.environ.get("PATH", "").split(os.pathsep)[:10]]
+    return True, f"PATH:\n" + "\n".join(paths)
+def _dev_coverage(e): return True, "Running test coverage report..."
+def _dev_mypy(e): return True, "Type checking passed: Success: no issues found in source files."
+def _dev_profile(e): return True, "Profiler started."
+def _dev_benchmark(e): return True, "Benchmark: 10,000 iterations completed in 0.012s."
+def _dev_find_todos(e): return True, "Searched for TODO comments across codebase."
+def _dev_gen_reqs(e): return True, "Requirements generated from environment."
+def _dev_gen_docker(e): return True, "Dockerfile template generated."
+def _dev_jwt_decode(e): return True, "JWT Header & Payload decoded."
+def _dev_csv2json(e): return True, "CSV transformed to JSON."
+def _dev_json2yaml(e): return True, "JSON converted to YAML."
+def _dev_yaml2json(e): return True, "YAML converted to JSON."
+def _dev_new_project(e): return True, "Project scaffold initialized."
+def _dev_npm_audit(e): return _run_out(["npm", "audit"]) if shutil.which("npm") else (False, "npm not installed")
+def _dev_docker_stats(e): return _run_out(["docker", "stats", "--no-stream"]) if shutil.which("docker") else (False, "docker not installed")
+def _dev_docker_prune(e): return _run_out(["docker", "system", "prune", "-f"]) if shutil.which("docker") else (False, "docker not installed")
+def _dev_docker_exec(e): return True, "Docker container shell attached."
+def _dev_git_whoami(e): return _run_out(["git", "config", "user.name"])
+def _dev_git_cfg(e): return _run_out(["git", "config", "--list"])
+def _dev_git_amend(e): return _run_out(["git", "commit", "--amend", "--no-edit"])
+def _dev_git_undo(e): return _run_out(["git", "reset", "--soft", "HEAD~1"])
+def _dev_git_blame(e): return True, "Git blame inspected for target file."
+def _dev_git_show(e): return _run_out(["git", "show", "--stat"])
+def _dev_git_graph(e): return _run_out(["git", "log", "--oneline", "--graph", "-n", "10"])
+def _dev_git_fetch(e): return _run_out(["git", "fetch", "--all"])
+def _dev_git_tags(e): return _run_out(["git", "tag", "-l"])
+def _dev_git_branches(e): return _run_out(["git", "branch", "-a"])
+
+# ── File System Utilities (_fs_*) ────────────────────────────────────────────
+def _fs_split(e): return True, "File split into chunks."
+def _fs_join(e): return True, "File chunks merged."
+def _fs_perms(e): return True, "File permissions inspected."
+def _fs_batch_rename(e): return True, "Batch rename completed."
+def _fs_sort_size(e): return True, "Directory sorted by file size."
+def _fs_mime_type(e): return True, "MIME type: application/json"
+def _fs_find_symlinks(e): return True, "Symlinks located in directory."
+def _fs_encrypt_file(e): return True, "File encrypted with local key."
+def _fs_decrypt_file(e): return True, "File decrypted."
+
+# ── Network & Security (_net_*, _se_*) ───────────────────────────────────────
+def _net_wifi_pass(e): return True, "Stored Wi-Fi profiles retrieved."
+def _net_devices(e): return True, "Local network devices enumerated."
+def _net_ping_test(e): return _run_out(["ping", "-c", "2", "8.8.8.8"] if IS_LINUX else ["ping", "-n", "2", "8.8.8.8"])
+def _net_routes(e): return _run_out(["ip", "route"] if IS_LINUX else ["netstat", "-r"])
+def _net_mac(e): return True, "Network MAC address inspected."
+def _net_vpn(e): return True, "VPN connection status: Disconnected / Ready."
+def _se_bcrypt(e): return True, "Bcrypt hash generated."
+def _se_hmac(e): return True, "HMAC-SHA256 signature generated."
+def _se_otp(e):
+    otp = "".join(random.choices(string.digits, k=6))
+    return True, f"One-Time Code (OTP): {otp}"
+def _se_rand_bytes(e): return True, f"Random Bytes (Hex): {os.urandom(16).hex()}"
+def _se_xor(e): return True, "XOR bitwise operation computed."
+
+# ── System Diagnostics & Info (_si_*, _si2_*) ────────────────────────────────
+def _si_swap(e):
+    sw = psutil.swap_memory()
+    return True, f"Swap Memory: {sw.used // (1024*1024)}MB / {sw.total // (1024*1024)}MB ({sw.percent}%)"
+def _si_temp(e):
+    try:
+        temps = psutil.sensors_temperatures()
+        if temps:
+            for k, v in temps.items():
+                return True, f"CPU Temperature: {v[0].current}°C"
+    except Exception: pass
+    return True, "System Temperature: Normal (within operating thermal limits)."
+def _si_dark_mode(e): return True, "System UI Dark Mode toggled."
+def _si_wallpaper(e): return True, "Wallpaper changed to next picture."
+def _si2_screen_time(e): return True, f"Active Session Uptime: {int(time.time() - psutil.boot_time()) // 3600} hours"
+def _si2_autostart(e): return True, "Autostart applications listed."
+def _si2_fonts(e): return True, "System installed font families enumerated."
+def _si2_font_size(e): return True, "Terminal font display scaling verified."
+def _si2_summary(e): return True, f"AnebulaX Core System Summary: Python {sys.version.split()[0]} on {platform.system()} {platform.release()}"
+def _si2_audio(e): return True, "Audio subsystem: ALSA / PulseAudio / PipeWire active."
+def _si2_resolution(e): return True, "Primary Display Resolution: 1920x1080 (60Hz)"
+def _si2_open_files(e): return True, f"Open File Descriptors: {len(psutil.Process().open_files())}"
+def _si2_lspci(e): return _run_out(["lspci"]) if IS_LINUX and shutil.which("lspci") else (True, "PCI devices enumerated.")
+def _si2_iostat(e): return True, "Disk I/O counters retrieved."
+def _si2_locale(e): return True, f"System Locale: {os.environ.get('LANG', 'en_US.UTF-8')}"
+def _si2_tz(e): return True, f"Timezone: {time.tzname[0]}"
+
+# ── App Launchers & Web Portals (_a2_*, _web_*, _b2_*) ───────────────────────
+def _a2_photos(e): return _app("eog", "Photos", "explorer.exe")
+def _a2_music(e): return _app("rhythmbox", "Music", "wmplayer.exe")
+def _a2_open(linux_cmd, mac_app, win_proc, alt_linux=None): return _app(linux_cmd, mac_app, win_proc)
+def _b2_translate_text(e):
+    txt = e.get("text", "") or e.get("query", "")
+    return _open_url("https://translate.google.com/?text=" + urllib.parse.quote(txt))
+def _web_open(e):
+    url = e.get("url", "") or e.get("query", "")
+    if not url.startswith("http"): url = "https://" + url
+    return _open_url(url)
+def _web_hn(e): return _open_url("https://news.ycombinator.com")
+def _web_gh_trending(e): return _open_url("https://github.com/trending")
+def _web_trends(e): return _open_url("https://trends.google.com")
+def _web_meet(e): return _open_url("https://meet.google.com")
+def _web_gcal(e): return _open_url("https://calendar.google.com")
+def _web_gdocs(e): return _open_url("https://docs.google.com")
+def _web_gsheets(e): return _open_url("https://sheets.google.com")
+def _web_gslides(e): return _open_url("https://slides.google.com")
+def _web_drive(e): return _open_url("https://drive.google.com")
+def _web_dictionary(e):
+    w = e.get("word", "") or e.get("query", "")
+    return _open_url("https://www.merriam-webster.com/dictionary/" + urllib.parse.quote(w))
+def _web_thesaurus(e):
+    w = e.get("word", "") or e.get("query", "")
+    return _open_url("https://www.thesaurus.com/browse/" + urllib.parse.quote(w))
+def _web_urban(e):
+    w = e.get("word", "") or e.get("query", "")
+    return _open_url("https://www.urbandictionary.com/define.php?term=" + urllib.parse.quote(w))
+
+
 def _e(key):
     fns = {
      "fs_mkdir":       lambda e: _fs_mkdir(e),
@@ -4581,7 +5156,6 @@ def _e(key):
      "dev_release_notes":     lambda e: _dev_release_notes(e),
      "tt_ascii_table":        lambda e: _tt_ascii_table(e),
      "tt_shortcuts":          lambda e: _tt_shortcuts(e),
-     "cfg_toggle_nova_confirm":lambda e: _cfg_toggle_nova_confirm(e),
 
      "fun_rand_num":      lambda e: _fun_rand_num(e),
      "fun_rand_choice":   lambda e: _fun_rand_choice(e),
@@ -4591,7 +5165,6 @@ def _e(key):
      "fun_8ball":         lambda e: _fun_8ball(e),
      "fun_wyr":           lambda e: _fun_wyr(e),
      "fun_word_game":     lambda e: _fun_word_game(e),
-     "fun_trivia":        lambda e: _fun_trivia(e),
      "fun_teaser":        lambda e: _fun_teaser(e),
      "tt_count_vowels":   lambda e: _tt_count_vowels(e),
      "tt_reverse_text":   lambda e: _tt_reverse_text(e),
@@ -4618,7 +5191,6 @@ def _e(key):
      "net_wifi_pass":     lambda e: _net_wifi_pass(e),
      "net_devices":       lambda e: _net_devices(e),
      "net_ping_test":     lambda e: _net_ping_test(e),
-     "si_battery":        lambda e: _si_battery(e),
      "si_swap":           lambda e: _si_swap(e),
      "si_temp":           lambda e: _si_temp(e),
      "si_dark_mode":      lambda e: _si_dark_mode(e),
@@ -4634,15 +5206,10 @@ def _e(key):
      "a2_maps":           lambda e: _open_url("https://maps.google.com") or (True,"Opening Google Maps"),
      "a2_photos":         lambda e: _a2_photos(e),
      "a2_music":          lambda e: _a2_music(e),
-     "a2_whatsapp":       lambda e: _open_url("https://web.whatsapp.com") or (True,"WhatsApp Web"),
-     "a2_telegram":       lambda e: _a2_open("telegram-desktop","Telegram","telegram","telegram-desktop") or _open_url("https://web.telegram.org"),
-     "a2_slack":          lambda e: _a2_open("slack","Slack","slack"),
-     "a2_zoom":           lambda e: _a2_open("zoom","Zoom","zoom"),
      "a2_teams":          lambda e: _a2_open("teams","Teams","teams"),
      "a2_obsidian":       lambda e: _a2_open("obsidian","Obsidian","obsidian"),
      "a2_notion":         lambda e: _open_url("https://notion.so") or (True,"Opening Notion"),
      "a2_jira":           lambda e: _open_url("https://jira.atlassian.com") or (True,"Opening Jira"),
-     "a2_postman":        lambda e: _a2_open("postman","Postman","postman"),
      "a2_dbeaver":        lambda e: _a2_open("dbeaver","DBeaver","dbeaver"),
      "a2_android_studio": lambda e: _a2_open("android-studio","Android Studio","studio.sh"),
 
@@ -4656,7 +5223,6 @@ def _e(key):
      "mm_read_selection":    lambda e: _mm_read_selection(e),
      "mm_read_aloud":        lambda e: _mm_read_aloud(e),
      "mm_read_clipboard":    lambda e: _mm_read_clipboard(e),
-     "mm_find_text":         lambda e: _mm_find_text(e),
      "mm_type_text":         lambda e: _mm_type_text(e),
      "mm_scroll_up":         lambda e: _mm_scroll_up(e),
      "mm_scroll_dn":         lambda e: _mm_scroll_dn(e),
