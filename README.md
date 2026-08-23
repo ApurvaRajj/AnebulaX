@@ -76,6 +76,12 @@ brew install portaudio ffmpeg
 
 **Windows:** PyAudio wheels are prebuilt for Python 3.7–3.13 — `pip install pyaudio` should just work. If not: `pip install pipwin && pipwin install pyaudio`.
 
+**Install automated pre-commit secret scanner hook:**
+```bash
+python3 scripts/pre_commit_secret_scan.py --install
+# or: cp scripts/pre_commit_secret_scan.py .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
+
 ## Usage
 
 ```bash
@@ -128,7 +134,7 @@ All in `~/.anebulax_*`:
 
 ## Known Limitations
 
-1. **Modular Architecture** — All 743 executors are implemented directly in `executors/` with zero dependency on any legacy monolithic script. `anebulax.py` and `main.py` serve as the clean primary modular entrypoints.
+1. **Modular Architecture** — All 747 executors are implemented directly in `executors/` with zero dependency on any legacy monolithic script. `anebulax.py` and `main.py` serve as the clean primary modular entrypoints.
 2. **Licensing system & Key Management** — AnebulaX implements Option B (Offline signed license file using asymmetric Ed25519 public-key verification). The client embeds only `EMBEDDED_PUBLIC_KEY_HEX`, verifying genuine vendor signatures without a server. Vendor private keys are not stored in the repository; they are intended to be generated offline and kept strictly in vendor secret environments (`NEBULA_VENDOR_PRIVATE_KEY`). A pre-signed evaluation license is shipped with the client for out-of-the-box community testing.
 3. **Voice confirmation for dangerous commands** — Shutdown, restart, sleep, and logout commands require explicit confirmation. In voice mode, the engine speaks the confirmation prompt and actively executes a targeted listening pass for verbal confirmation ("yes", "confirm", "proceed") before proceeding.
 4. **Trigger-set redundancy** — 341 executors have more than one unique trigger-set registered in `_CMD_TABLE`, totaling 875 unique trigger-sets among them. This is intentional (natural-language robustness — "set volume to 50", "change volume 50", "volume 50" all route to the same executor) but inflates the pattern count.
@@ -147,9 +153,10 @@ All in `~/.anebulax_*`:
 python -m pytest test_matcher.py -v
 ```
 
-46 tests covering:
+47 tests covering:
 - Matcher routing, word-set scoring, and specificity tie-breaking
-- Zero dead executors across all 743 triggers (`test_all_matched_executors_are_dispatchable`)
+- Zero dead executors across all 747 triggers (`test_all_matched_executors_are_dispatchable`)
+- Antigravity AI model controls (`test_antigravity_model_triggers`)
 - No bare `except:` statements across all modules (`test_no_bare_except`)
 - User-defined aliases and typo corrections (`test_alias_not_bad`, `test_typo_correction_define`)
 - Software hot-reloading without restart (`test_software_hot_reloading`)

@@ -70,6 +70,20 @@ def scan_file(file_path: Path) -> list:
 
 def main():
     root = get_project_root()
+
+    if "--install" in sys.argv:
+        hook_path = root / ".git" / "hooks" / "pre-commit"
+        hook_path.parent.mkdir(parents=True, exist_ok=True)
+        hook_content = "#!/usr/bin/env bash\npython3 scripts/pre_commit_secret_scan.py\n"
+        hook_path.write_text(hook_content, encoding="utf-8")
+        try:
+            import os
+            os.chmod(hook_path, 0o755)
+        except Exception:
+            pass
+        print(f"✓ Pre-commit secret scan hook installed to: {hook_path}")
+        sys.exit(0)
+
     scan_targets = []
 
     # If git is available, scan staged files; otherwise sweep entire workspace
