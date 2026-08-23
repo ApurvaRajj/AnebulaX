@@ -38,7 +38,7 @@ User Input (voice/text)
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
-│    Executor      │  ← 743 functions: _fs_mkdir, _sys_vol_up, _p_time, etc.
+│    Executor      │  ← 747 functions: _fs_mkdir, _sys_vol_up, _p_time, etc.
 └────────┬─────────┘
          ▼
 ┌──────────────────┐
@@ -55,7 +55,7 @@ The codebase is partitioned into distinct modular components:
 - **`licensing.py`** — Offline asymmetric Ed25519 licensing system (`~/.anebulax_license.key`).
 - **`tts.py`** — Thread-safe queue with per-role muting. Engines: gTTS (online, natural) → pyttsx3 (offline) → espeak-ng → festival → flite → say (macOS). A `_SPEAK_EXECUTORS` set controls which commands speak vs stay silent.
 - **`stt.py`** — Configurable: Google (online, default) or Vosk (offline) with `pause_threshold = 0.50s` and `non_speaking_duration = 0.40s`. Switch with `set stt google` / `set stt vosk`. Microphone device selection via `list mics` / `set mic N`.
-- **`executors/`** — 100% of all 743 executors natively partitioned into domain modules (`system.py`, `web.py`, `media.py`, `productivity.py`, `developer.py`, `math_solver.py`, `config_exec.py`, `common.py`) with zero monolithic fallback dependency.
+- **`executors/`** — 100% of all 747 executors natively partitioned into domain modules (`system.py`, `web.py`, `media.py`, `productivity.py`, `developer.py`, `math_solver.py`, `config_exec.py`, `common.py`) with zero monolithic fallback dependency.
 - **`main.py` / `anebulax.py`** — Application entrypoint, CLI REPL, Nova AI async worker, and voice loop with active confirmation handling and low-level C stderr audio suppression.
 
 ## Installation
