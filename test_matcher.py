@@ -238,23 +238,35 @@ class TestNoDeadExecutors:
         mock_resp.read.return_value = b'{"status": "ok", "price": 100}'
         mock_resp.__enter__.return_value = mock_resp
 
+        patches = [
+            patch('subprocess.run', return_value=MagicMock(returncode=0, stdout='ok', stderr='')),
+            patch('subprocess.Popen'),
+            patch('webbrowser.open'),
+            patch('time.sleep'),
+            patch('urllib.request.urlopen', return_value=mock_resp),
+            patch('urllib.request.urlretrieve', return_value=('/tmp/test', None)),
+            patch('socket.create_connection'),
+            patch('socket.gethostbyname', return_value='127.0.0.1'),
+            patch('os.walk', return_value=[('/tmp', [], ['test.txt'])]),
+            patch('shutil.rmtree'),
+            patch('shutil.copy2'),
+            patch('shutil.move'),
+            patch('pathlib.Path.unlink'),
+            patch('pathlib.Path.mkdir'),
+            patch('pathlib.Path.touch'),
+            patch('pathlib.Path.symlink_to'),
+            patch.object(executors, 'Thread'),
+            patch.object(executors, '_confirm_dangerous', return_value=(True, 'Confirmed')),
+            patch.object(executors, '_cfg_test_mic', return_value=(True, 'Mic ok')),
+            patch.object(executors, '_send_keys'),
+        ]
+
+        for p in patches:
+            p.start()
+
         missing = []
         name_errors = []
-
-        with patch('subprocess.run', return_value=MagicMock(returncode=0, stdout='ok', stderr='')), \
-             patch('subprocess.Popen'), \
-             patch('webbrowser.open'), \
-             patch('time.sleep'), \
-             patch('urllib.request.urlopen', return_value=mock_resp), \
-             patch('urllib.request.urlretrieve', return_value=('/tmp/test', None)), \
-             patch('socket.create_connection'), \
-             patch('socket.gethostbyname', return_value='127.0.0.1'), \
-             patch('os.walk', return_value=[('/tmp', [], ['test.txt'])]), \
-             patch.object(executors, 'Thread'), \
-             patch.object(executors, '_confirm_dangerous', return_value=(True, 'Confirmed')), \
-             patch.object(executors, '_cfg_test_mic', return_value=(True, 'Mic ok')), \
-             patch.object(executors, '_send_keys'):
-
+        try:
             for trig, (ex, w) in intents_db._CMD_TABLE:
                 fn = executors._e(ex)
                 if fn is None:
@@ -266,6 +278,9 @@ class TestNoDeadExecutors:
                     name_errors.append((ex, str(ne)))
                 except Exception:
                     pass
+        finally:
+            for p in patches:
+                p.stop()
 
         assert len(missing) == 0, (
             f"{len(missing)} missing executors: "
