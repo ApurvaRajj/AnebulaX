@@ -42,7 +42,9 @@ DEFAULT_COMMUNITY_LICENSE: Dict[str, Any] = {
     "signature": "OCWQ3rCls+g7uTLZC4+tdvaC+ymdA3x6Zn4zsGeZbnbAozsVVL+BLt3qw1ngaE15TFZxs+2YMpQOZ8Aq73t8Bg=="
 }
 
-LICENSE_FILE_PATH = Path.home() / ".nebula_license.key"
+from config import _LICENSE_FILE
+
+LICENSE_FILE_PATH = _LICENSE_FILE if _LICENSE_FILE.exists() else (Path.home() / ".anebulax_license.key")
 
 
 def get_machine_fingerprint() -> str:

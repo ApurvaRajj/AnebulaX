@@ -98,59 +98,6 @@ def _p_note_del(e) -> Tuple[bool, str]:
     return False, f"No note found matching '{q}'"
 
 
-# ── Reminders ────────────────────────────────────────────────────────────────
-def _load_reminders() -> list:
-    try:
-        if _REMINDERS_FILE.exists():
-            return json.loads(_REMINDERS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return []
-
-
-def _save_reminders(rems: list):
-    try:
-        _REMINDERS_FILE.write_text(json.dumps(rems, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def _p_remind(e) -> Tuple[bool, str]:
-    dur = e.get("duration", 60)
-    txt = e.get("text", "") or e.get("query", "Time is up!")
-    rems = _load_reminders()
-    rems.append({
-        "msg": txt,
-        "duration": dur,
-        "created_at": datetime.now().isoformat(),
-    })
-    _save_reminders(rems)
-
-    def _fire():
-        time.sleep(dur)
-        if _spk_ref[0]:
-            _spk_ref[0].speak(f"Reminder: {txt}", role="nebula")
-
-    threading.Thread(target=_fire, daemon=True).start()
-    mins = dur // 60
-    secs = dur % 60
-    time_str = f"{mins}m" if mins and not secs else (f"{secs}s" if not mins else f"{mins}m {secs}s")
-    return True, f"Reminder set for {time_str}: {txt}"
-
-
-def _p_reminders_show(e) -> Tuple[bool, str]:
-    rems = _load_reminders()
-    if not rems:
-        return True, "No reminders saved."
-    lines = [f"  [{i+1}] {r['msg']} (duration: {r['duration']}s)" for i, r in enumerate(rems)]
-    return True, "⏰ Reminders:\n" + "\n".join(lines)
-
-
-def _p_reminders_clear(e) -> Tuple[bool, str]:
-    _save_reminders([])
-    return True, "All reminders cleared"
-
-
 # ── Todos & Habits ───────────────────────────────────────────────────────────
 def _load_todos() -> list:
     try:

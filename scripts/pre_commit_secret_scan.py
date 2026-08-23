@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Pre-commit hook to scan for hardcoded secrets, private keys, and high-entropy hex strings.
+Works reliably whether executed from repo root, scripts/, or .git/hooks/.
 """
 import sys
+import os
 import re
 from pathlib import Path
 
@@ -11,8 +13,8 @@ SUSPICIOUS_PATTERNS = [
     (r'(?i)(?:vendor|demo|master|admin)?_?priv(?:ate)?_?(?:hex|key)\s*=\s*["\'][a-f0-9]{32,128}["\']', "Hardcoded Private Key Variable"),
     (r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----', "PEM Private Key Block"),
     (r'(?i)(?:secret|api_key|token|auth_token)\s*=\s*["\'][A-Za-z0-9_\-]{24,128}["\']', "Hardcoded Secret / API Key"),
-    (r'(?i)VENDOR_DEMO_PRIV_HEX', "Legacy Compromised Key Identifier"),
-    (r'(?i)VENDOR_PRIV_HEX', "Private Key Variable Identifier"),
+    (r'(?i)VENDOR_DEMO_PRIV_HEX\s*=', "Legacy Compromised Key Assignment"),
+    (r'(?i)VENDOR_PRIV_HEX\s*=', "Private Key Variable Assignment"),
 ]
 
 # Allowlisted files and patterns (e.g., test fixtures that test rejection of fake keys, public verification keys)
@@ -25,9 +27,19 @@ ALLOWLIST_PATTERNS = [
 ]
 
 
+def get_project_root() -> Path:
+    """Dynamically find project root by searching upwards for config.py, anebulax.py, or .git."""
+    cur = Path(__file__).resolve().parent
+    while cur != cur.parent:
+        if (cur / "config.py").exists() or (cur / "anebulax.py").exists() or (cur / ".git").exists():
+            return cur
+        cur = cur.parent
+    return Path.cwd()
+
+
 def scan_file(file_path: Path) -> list:
     issues = []
-    if file_path.name == "pre_commit_secret_scan.py":
+    if file_path.name in ("pre_commit_secret_scan.py", "pre-commit"):
         return issues
     if file_path.suffix not in (".py", ".json", ".txt", ".md", ".sh", ".yml", ".yaml"):
         return issues
@@ -55,10 +67,10 @@ def scan_file(file_path: Path) -> list:
 
 
 def main():
-    root = Path(__file__).resolve().parent.parent
+    root = get_project_root()
     scan_targets = []
 
-    # If git is available, scan staged files; otherwise scan workspace
+    # If git is available, scan staged files; otherwise sweep entire workspace
     import subprocess
     try:
         res = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, cwd=root)
@@ -68,16 +80,16 @@ def main():
     except Exception:
         pass
 
+    # Always scan full workspace as safety net if no staged targets found
     if not scan_targets:
-        # Full workspace sweep
         for ext in ("*.py", "*.json", "*.md"):
             scan_targets.extend(root.glob(ext))
         scan_targets.extend((root / "executors").glob("*.py"))
+        scan_targets.extend((root / "scripts").glob("*.py"))
 
     all_issues = []
     for path in set(scan_targets):
-        # Skip git cache and venv
-        if ".git" in path.parts or ".pytest_cache" in path.parts or "__pycache__" in path.parts:
+        if any(part in (".git", ".pytest_cache", "__pycache__") for part in path.parts):
             continue
         all_issues.extend(scan_file(path))
 

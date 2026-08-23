@@ -123,6 +123,7 @@ _CMD_HISTORY_FILE = _HOME / ".anebulax_cmd_history.json"
 _ALIASES_FILE = _HOME / ".anebulax_aliases.json"
 _BOOKMARKS_FILE = _HOME / ".anebulax_bookmarks.json"
 _SOFTWARE_FILE = _HOME / ".anebulax_software.txt"
+_LICENSE_FILE = _HOME / ".anebulax_license.key"
 _LOG_FILE = _CONF_DIR / "anebulax.log"
 _VOSK_MODEL_DIR = _CONF_DIR / "vosk-model"
 

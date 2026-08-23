@@ -1314,7 +1314,9 @@ def _web_search_incognito(e):
 def _open_quick_link(word):
     """Look up word in links.txt and open the corresponding URL.
     Format: word|URL  or  word=URL  or  word URL (one per line)"""
-    links_file = Path.home() / ".nebula_links.txt"
+    links_file = Path.home() / ".anebulax_links.txt"
+    if not links_file.exists():
+        links_file = Path.home() / ".nebula_links.txt"
     if not links_file.exists():
         return None
     try:
@@ -1551,12 +1553,12 @@ def _p_notes_list(e):
 def _p_journal(e):
     text = e.get("text","")
     if not text: return False,"What to journal?"
-    jfile = Cfg.HOME/".nebula_journal.txt"; ts = datetime.now().strftime("[%Y-%m-%d %H:%M]")
+    jfile = Cfg.HOME/".anebulax_journal.txt"; ts = datetime.now().strftime("[%Y-%m-%d %H:%M]")
     with open(jfile,"a",encoding="utf-8") as f: f.write(f"\n{ts}\n{text}\n")
     return True,"Journal entry saved"
 
 def _p_journal_read(e):
-    jfile = Cfg.HOME/".nebula_journal.txt"
+    jfile = Cfg.HOME/".anebulax_journal.txt"
     if not jfile.exists(): return True,"No journal entries yet"
     lines = jfile.read_text(encoding="utf-8").strip().splitlines()
     return True,"Journal (last 10 lines):\n"+"\n".join(lines[-10:])
